@@ -3,39 +3,62 @@ name: PR Policy
 on:
   workflow_call:
 
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
 jobs:
   policy:
     name: Policy
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check PR contains ticket reference
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          TEXT="$PR_TITLE $PR_BODY"
+      - name: Run PR policy and publish stable status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
 
-          JIRA_REGEX='\b[A-Z][A-Z0-9]+-[0-9]+\b'
-          TRELLO_REGEX='https?://trello\.com/c/[a-zA-Z0-9]+'
+            if (!pr) {
+              core.setFailed("This workflow must run on a pull_request event.");
+              return;
+            }
 
-          if echo "$TEXT" | grep -qE "$JIRA_REGEX|$TRELLO_REGEX"; then
-            echo "✅ PR contains a ticket reference."
-          else
-            echo "❌ PR must contain either:"
-            echo "   - Jira/internal ticket like HF-123, API-45, HYPERFLOW-88"
-            echo "   - Trello card link like https://trello.com/c/abc123/..."
-            echo ""
-            echo "Current title: $PR_TITLE"
-            exit 1
-          fi
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = pr.head.sha;
 
-      - name: Check PR description is not empty
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          if [ -z "$(echo "$PR_BODY" | tr -d '[:space:]')" ]; then
-            echo "❌ PR description cannot be empty."
-            exit 1
-          fi
-          echo "✅ PR description is present."
+            const title = pr.title || "";
+            const body = pr.body || "";
+            const text = `${title}\n${body}`;
+
+            const jiraRegex = /\b[A-Z][A-Z0-9]+-[0-9]+\b/;
+            const trelloRegex = /https?:\/\/trello\.com\/c\/[a-zA-Z0-9]+/;
+
+            const errors = [];
+
+            if (!jiraRegex.test(text) && !trelloRegex.test(text)) {
+              errors.push("PR must contain a Jira/internal ticket like HF-123 or a Trello card link.");
+            }
+
+            if (!body.trim()) {
+              errors.push("PR description cannot be empty.");
+            }
+
+            const passed = errors.length === 0;
+
+            await github.rest.repos.createCommitStatus({
+              owner,
+              repo,
+              sha,
+              state: passed ? "success" : "failure",
+              context: "hyperflow/pr-policy",
+              description: passed
+                ? "PR policy passed"
+                : errors[0].slice(0, 140)
+            });
+
+            if (!passed) {
+              core.setFailed(errors.join("\n"));
+            }
