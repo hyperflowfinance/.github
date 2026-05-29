@@ -4,8 +4,8 @@ on:
   workflow_call:
 
 jobs:
-  enforce-pr-policy:
-    name: Enforce PR Policy
+  policy:
+    name: Policy
     runs-on: ubuntu-latest
 
     steps:
@@ -17,7 +17,7 @@ jobs:
           TEXT="$PR_TITLE $PR_BODY"
 
           JIRA_REGEX='\b[A-Z][A-Z0-9]+-[0-9]+\b'
-          TRELLO_REGEX='https://trello\.com/c/[a-zA-Z0-9]+'
+          TRELLO_REGEX='https?://trello\.com/c/[a-zA-Z0-9]+'
 
           if echo "$TEXT" | grep -qE "$JIRA_REGEX|$TRELLO_REGEX"; then
             echo "✅ PR contains a ticket reference."
