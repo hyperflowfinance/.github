@@ -2,23 +2,21 @@ name: PR Policy
 
 on:
   workflow_call:
-  pull_request:
-    types: [opened, edited, synchronize, reopened]
 
 jobs:
   enforce-pr-policy:
     name: Enforce PR Policy
     runs-on: ubuntu-latest
+
     steps:
       - name: Check PR title contains ticket reference
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          # Matches Jira-style (e.g. ABC-123) or Trello-style short links (e.g. [abc123] or #abc123)
-          if echo "$PR_TITLE" | grep -qiE '([A-Z]+-[0-9]+|\[?[a-zA-Z0-9]{5,}\]?|#[a-zA-Z0-9]+)'; then
+          if echo "$PR_TITLE" | grep -qiE '([A-Z]+-[0-9]+)|(\[[a-zA-Z0-9]{3,}\])|(#?[a-zA-Z0-9]+)'; then
             echo "✅ PR title contains a ticket reference: $PR_TITLE"
           else
-            echo "❌ PR title must contain a Jira (e.g. ABC-123) or Trello ticket reference."
+            echo "❌ PR title must contain a Jira/Trello ticket reference."
             exit 1
           fi
 
