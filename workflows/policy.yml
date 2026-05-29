@@ -1,6 +1,7 @@
 name: PR Policy
 
 on:
+  workflow_call:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
