@@ -35,7 +35,7 @@ jobs:
 
             const jiraRegex = /\b[A-Z][A-Z0-9]+-[0-9]+\b/;
             const trelloRegex = /https?:\/\/trello\.com\/c\/[a-zA-Z0-9]+/;
-            const depsTitleRegex = /^build\(deps\)/i;
+            const depsTitleRegex = /^build\(deps\)/;
 
             const errors = [];
 
