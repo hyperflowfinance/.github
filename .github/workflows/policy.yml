@@ -35,13 +35,13 @@ jobs:
 
             const jiraRegex = /\b[A-Z][A-Z0-9]+-[0-9]+\b/;
             const trelloRegex = /https?:\/\/trello\.com\/c\/[a-zA-Z0-9]+/;
-            const depsTitleRegex = /^build\(deps\)/;
+            const prAuthor = (pr.user?.login || "").toLowerCase();
 
             const errors = [];
 
-            const isDepsPR = depsTitleRegex.test(title.trim());
+            const isDependabotPR = prAuthor === "dependabot[bot]";
 
-            if (!isDepsPR && !jiraRegex.test(text) && !trelloRegex.test(text)) {
+            if (!isDependabotPR && !jiraRegex.test(text) && !trelloRegex.test(text)) {
               errors.push("PR must contain a Jira/internal ticket like HF-123 or a Trello card link.");
             }
 
