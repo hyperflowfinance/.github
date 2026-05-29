@@ -13,10 +13,11 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if echo "$PR_TITLE" | grep -qiE '([A-Z]+-[0-9]+)|(\[[a-zA-Z0-9]{3,}\])|(#?[a-zA-Z0-9]+)'; then
+          if echo "$PR_TITLE" | grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'; then
             echo "✅ PR title contains a ticket reference: $PR_TITLE"
           else
-            echo "❌ PR title must contain a Jira/Trello ticket reference."
+            echo "❌ PR title must contain a ticket reference like HF-123, API-45, or HYPERFLOW-88."
+            echo "Current title: $PR_TITLE"
             exit 1
           fi
 
