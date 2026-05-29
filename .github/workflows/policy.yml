@@ -9,14 +9,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check PR title contains ticket reference
+      - name: Check PR contains ticket reference
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          if echo "$PR_TITLE" | grep -qE '\b[A-Z][A-Z0-9]+-[0-9]+\b'; then
-            echo "✅ PR title contains a ticket reference: $PR_TITLE"
+          TEXT="$PR_TITLE $PR_BODY"
+
+          JIRA_REGEX='\b[A-Z][A-Z0-9]+-[0-9]+\b'
+          TRELLO_REGEX='https://trello\.com/c/[a-zA-Z0-9]+'
+
+          if echo "$TEXT" | grep -qE "$JIRA_REGEX|$TRELLO_REGEX"; then
+            echo "✅ PR contains a ticket reference."
           else
-            echo "❌ PR title must contain a ticket reference like HF-123, API-45, or HYPERFLOW-88."
+            echo "❌ PR must contain either:"
+            echo "   - Jira/internal ticket like HF-123, API-45, HYPERFLOW-88"
+            echo "   - Trello card link like https://trello.com/c/abc123/..."
+            echo ""
             echo "Current title: $PR_TITLE"
             exit 1
           fi
