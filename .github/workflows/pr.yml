@@ -1,0 +1,12 @@
+name: PR Policy Check
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize, ready_for_review]
+
+jobs:
+  pr-policy:
+    uses: hyperflowfinance/.github/.github/workflows/policy.yml@main
+    secrets:
+      TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+      TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
