@@ -3,9 +3,11 @@ name: PR Policy
 on:
   workflow_call:
     secrets:
-      TRELLO_KEY:
+      JIRA_BASE_URL:
         required: false
-      TRELLO_TOKEN:
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
         required: false
 
 permissions:
@@ -22,8 +24,9 @@ jobs:
       - name: Run PR policy and publish stable status
         uses: actions/github-script@v7
         env:
-          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
-          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -40,34 +43,37 @@ jobs:
             const jiraRegex = /\b[A-Z][A-Z0-9]+-[0-9]+\b/;
             const jiraMatch = text.match(jiraRegex);
             const hasJiraTicket = Boolean(jiraMatch);
-            const trelloRegex = /https?:\/\/(?:www\.)?trello\.com\/c\/([a-zA-Z0-9]+)/;
-            const trelloMatch = text.match(trelloRegex);
-            const trelloShortLink = trelloMatch?.[1] || null;
-            const hasTrelloUrl = Boolean(trelloShortLink);
-            let validTrelloCard = false;
-            if (hasTrelloUrl) {
-              const trelloKey = process.env.TRELLO_KEY;
-              const trelloToken = process.env.TRELLO_TOKEN;
-              if (!trelloKey || !trelloToken) {
-                core.warning("Trello validation could not run: TRELLO_KEY and TRELLO_TOKEN secrets are required.");
+            let validJiraIssue = false;
+            if (hasJiraTicket) {
+              const jiraBase = process.env.JIRA_BASE_URL;
+              const jiraUser = process.env.JIRA_USER;
+              const jiraToken = process.env.JIRA_TOKEN;
+              if (!jiraBase || !jiraUser || !jiraToken) {
+                core.warning("Jira API validation skipped: JIRA_BASE_URL, JIRA_USER, and JIRA_TOKEN secrets are required.");
+                validJiraIssue = true; // fall back to regex match when secrets are absent
               } else {
-                const res = await fetch(`https://api.trello.com/1/cards/${trelloShortLink}?fields=id,closed,name,url&key=${trelloKey}&token=${trelloToken}`);
-                core.info(`Trello API status: ${res.status}`);
-                if (res.ok) { const card = await res.json(); validTrelloCard = card.closed === false; }
-                else { errors.push(`Trello card could not be validated (API status: ${res.status}).`); }
+                const auth = Buffer.from(`${jiraUser}:${jiraToken}`).toString("base64");
+                const res = await fetch(`${jiraBase}/rest/api/3/issue/${jiraMatch[0]}?fields=status`, { headers: { Authorization: `Basic ${auth}`, Accept: "application/json" } });
+                core.info(`Jira API status: ${res.status}`);
+                if (res.ok) {
+                  const issue = await res.json();
+                  const statusCategory = issue.fields?.status?.statusCategory?.key;
+                  validJiraIssue = statusCategory !== "done";
+                } else {
+                  errors.push(`Jira issue could not be validated (API status: ${res.status}).`);
+                }
               }
             }
-            const hasValidTrelloCard = validTrelloCard;
+            const hasValidJiraIssue = validJiraIssue;
             const isBotBypass = isDependabotPR;
-            const missingTicket = !isBotBypass && !hasJiraTicket && !hasValidTrelloCard;
-            if (missingTicket) {
-              errors.push("PR must contain a Jira/internal ticket like HF-123 or a valid open Trello card link.");
+            const ticketValidationFailed = !isBotBypass && !hasValidJiraIssue;
+            if (ticketValidationFailed) {
+              errors.push("PR must contain a Jira/internal ticket like HF-123.");
             }
             if (!body) { errors.push("PR description cannot be empty."); }
             core.info(`PR author: ${prAuthor}`);
             core.info(`Jira ticket: ${jiraMatch?.[0] || "none"}`);
-            core.info(`Trello URL found: ${hasTrelloUrl}`);
-            core.info(`Trello card valid: ${hasValidTrelloCard}`);
+            core.info(`Jira issue valid: ${hasValidJiraIssue}`);
             const passed = errors.length === 0;
             core.info(`PR policy passed: ${passed}`);
             await github.rest.repos.createCommitStatus({

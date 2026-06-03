@@ -8,5 +8,6 @@ jobs:
   pr-policy:
     uses: hyperflowfinance/.github/.github/workflows/policy.yml@main
     secrets:
-      TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
-      TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      JIRA_USER: ${{ secrets.JIRA_USER }}
+      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
