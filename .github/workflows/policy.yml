@@ -2,6 +2,13 @@ name: PR Policy
 
 on:
   workflow_call:
+    secrets:
+      JIRA_BASE_URL:
+        required: false
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -16,52 +23,63 @@ jobs:
     steps:
       - name: Run PR policy and publish stable status
         uses: actions/github-script@v7
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
         with:
           script: |
             const pr = context.payload.pull_request;
-
-            if (!pr) {
-              core.setFailed("This workflow must run on a pull_request event.");
-              return;
-            }
-
+            if (!pr) { core.setFailed("This workflow must run on a pull_request event."); return; }
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sha = pr.head.sha;
-
-            const title = pr.title || "";
-            const body = pr.body || "";
-            const text = `${title}\n${body}`;
-
-            const jiraRegex = /\b[A-Z][A-Z0-9]+-[0-9]+\b/;
-            const trelloRegex = /https?:\/\/trello\.com\/c\/[a-zA-Z0-9]+/;
             const prAuthor = pr.user?.login || "";
-
-            const errors = [];
-
             const isDependabotPR = prAuthor === "dependabot[bot]";
-
-            if (!isDependabotPR && !jiraRegex.test(text) && !trelloRegex.test(text)) {
-              errors.push("PR must contain a Jira/internal ticket like HF-123 or a Trello card link.");
+            const title = pr.title || "";
+            const body = (pr.body || "").replace(/<!--[\s\S]*?-->/g, "").trim();
+            const text = `${title}\n${body}`;
+            const errors = [];
+            const jiraRegex = /\b[A-Z][A-Z0-9]+-[0-9]+\b/;
+            const jiraMatch = text.match(jiraRegex);
+            const hasJiraTicket = Boolean(jiraMatch);
+            let validJiraIssue = false;
+            if (hasJiraTicket) {
+              const jiraBase = process.env.JIRA_BASE_URL;
+              const jiraUser = process.env.JIRA_USER;
+              const jiraToken = process.env.JIRA_TOKEN;
+              if (!jiraBase || !jiraUser || !jiraToken) {
+                core.warning("Jira API validation skipped: JIRA_BASE_URL, JIRA_USER, and JIRA_TOKEN secrets are required.");
+                validJiraIssue = true; // fall back to regex match when secrets are absent
+              } else {
+                const auth = Buffer.from(`${jiraUser}:${jiraToken}`).toString("base64");
+                const res = await fetch(`${jiraBase}/rest/api/3/issue/${jiraMatch[0]}?fields=status`, { headers: { Authorization: `Basic ${auth}`, Accept: "application/json" } });
+                core.info(`Jira API status: ${res.status}`);
+                if (res.ok) {
+                  const issue = await res.json();
+                  const statusCategory = issue.fields?.status?.statusCategory?.key;
+                  validJiraIssue = statusCategory !== "done";
+                } else {
+                  errors.push(`Jira issue could not be validated (API status: ${res.status}).`);
+                }
+              }
             }
-
-            if (!body.trim()) {
-              errors.push("PR description cannot be empty.");
+            const hasValidJiraIssue = validJiraIssue;
+            const isBotBypass = isDependabotPR;
+            const ticketValidationFailed = !isBotBypass && !hasValidJiraIssue;
+            if (ticketValidationFailed) {
+              errors.push("PR must contain a Jira/internal ticket like HF-123.");
             }
-
+            if (!body) { errors.push("PR description cannot be empty."); }
+            core.info(`PR author: ${prAuthor}`);
+            core.info(`Jira ticket: ${jiraMatch?.[0] || "none"}`);
+            core.info(`Jira issue valid: ${hasValidJiraIssue}`);
             const passed = errors.length === 0;
-
+            core.info(`PR policy passed: ${passed}`);
             await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha,
+              owner, repo, sha,
               state: passed ? "success" : "failure",
               context: "hyperflow/pr-policy",
-              description: passed
-                ? "PR policy passed"
-                : errors[0].slice(0, 140)
+              description: passed ? "PR policy passed" : errors[0].slice(0, 140)
             });
-
-            if (!passed) {
-              core.setFailed(errors.join("\n"));
-            }
+            if (!passed) { core.setFailed(errors.join("\n")); }
