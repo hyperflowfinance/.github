@@ -40,8 +40,23 @@ jobs:
             const errors = [];
 
             const isDependabotPR = prAuthor === "dependabot[bot]";
+            const isFetchReleaseCandidate = owner === "hyperflowfinance" &&
+              repo === "infra-api" && prAuthor === "prod-promote[bot]" &&
+              pr.base.ref === "main" &&
+              pr.head.ref.startsWith("stage-release/web-mcp-fetch-") &&
+              /^Release Fetch MCP v\d+\.\d+\.\d+ to stage$/.test(title);
+            let isGeneratedFetchPinPR = false;
+            if (isFetchReleaseCandidate) {
+              const {data: files} = await github.rest.pulls.listFiles({
+                owner, repo, pull_number: pr.number
+              });
+              isGeneratedFetchPinPR = files.length === 1 &&
+                files[0].filename === "terragrunt/aws/eu-central-1/stage/web-mcp/fetch-release.json" &&
+                files[0].status === "modified";
+            }
 
-            if (!isDependabotPR && !jiraRegex.test(text) && !trelloRegex.test(text)) {
+            if (!isDependabotPR && !isGeneratedFetchPinPR &&
+                !jiraRegex.test(text) && !trelloRegex.test(text)) {
               errors.push("PR must contain a Jira/internal ticket like HF-123 or a Trello card link.");
             }
 
