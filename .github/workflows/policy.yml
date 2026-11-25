@@ -39,9 +39,9 @@ jobs:
 
             const errors = [];
 
-            const isDependabotPR = prAuthor === "dependabot[bot]";
+            const isExemptBotPR = ["dependabot[bot]", "prod-promote[bot]"].includes(prAuthor);
 
-            if (!isDependabotPR && !jiraRegex.test(text) && !trelloRegex.test(text)) {
+            if (!isExemptBotPR && !jiraRegex.test(text) && !trelloRegex.test(text)) {
               errors.push("PR must contain a Jira/internal ticket like HF-123 or a Trello card link.");
             }
 
